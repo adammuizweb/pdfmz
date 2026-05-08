@@ -1,6 +1,11 @@
 .venv/
 __pycache__/
 *.pyc
+
+build/
+dist/
+*.spec
+
 *.pdf
 output/
 .env
