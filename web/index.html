@@ -4,7 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>PDFMZ — Potong PDF & Convert ke Gambar</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>">
+<link rel="icon" href="/pdf/icon.svg">
+<link rel="manifest" href="/pdf/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="PDFMZ">
+<link rel="apple-touch-icon" href="/pdf/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -199,8 +204,9 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
   <div class="header-inner">
     <div class="header-logo"><span>✂️</span> PDFMZ</div>
     <nav class="header-nav">
-      <a href="https://github.com/adammuizweb/pdfmz" target="_blank">GitHub</a>
+      <a href="#" onclick="downloadSample();return false">📄 Contoh PDF</a>
       <a href="https://github.com/adammuizweb/pdfmz/releases" target="_blank">Download Windows</a>
+      <a href="https://github.com/adammuizweb/pdfmz" target="_blank">GitHub</a>
     </nav>
   </div>
 </header>
@@ -277,6 +283,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
             <option value="jpeg">JPG</option>
             <option value="png">PNG</option>
             <option value="webp">WEBP</option>
+            <option value="avif">AVIF</option>
           </select>
         </div>
 
@@ -324,6 +331,10 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
 </footer>
 
 <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/pdf/sw.js', { scope: '/pdf/' });
+}
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 let pdfDoc = null;
@@ -391,6 +402,7 @@ async function handleFile(file) {
   selectedPages = new Set(Array.from({ length: totalPages }, (_, i) => i));
   renderThumbnails();
   renderThumbnailsConvert();
+  syncRangeInputs();
 }
 
 // ===== Thumbnails =====
@@ -451,20 +463,25 @@ async function renderThumbPage(pageNum, canvas) {
   }
 }
 
+let syncLock = false;
+
 function togglePage(idx) {
   if (selectedPages.has(idx)) selectedPages.delete(idx);
   else selectedPages.add(idx);
   updatePreviews();
+  syncRangeInputs();
 }
 
 function selectAll() {
   selectedPages = new Set(Array.from({ length: totalPages }, (_, i) => i));
   updatePreviews();
+  syncRangeInputs();
 }
 
 function deselectAll() {
   selectedPages = new Set();
   updatePreviews();
+  syncRangeInputs();
 }
 
 function updatePreviews() {
@@ -472,6 +489,39 @@ function updatePreviews() {
     const idx = parseInt(el.dataset.page);
     el.classList.toggle('selected', selectedPages.has(idx));
   });
+}
+
+function syncRangeInputs() {
+  if (syncLock) return;
+  const sorted = [...selectedPages].sort((a, b) => a - b);
+  let ranges = [];
+  let start = sorted[0], end = sorted[0];
+  for (let i = 1; i <= sorted.length; i++) {
+    if (sorted[i] === end + 1) { end = sorted[i]; continue; }
+    ranges.push(start === end ? `${start + 1}` : `${start + 1}-${end + 1}`);
+    start = sorted[i];
+    end = sorted[i];
+  }
+  syncLock = true;
+  const txt = ranges.join(',');
+  document.getElementById('pageRangeCut').value = txt;
+  document.getElementById('pageRangeConvert').value = txt;
+  syncLock = false;
+}
+
+function applyRangeFromInput() {
+  if (syncLock) return;
+  const tab = document.querySelector('.tab-btn.active');
+  const inputId = tab && tab.dataset.tab === 'convert' ? 'pageRangeConvert' : 'pageRangeCut';
+  const txt = document.getElementById(inputId).value.trim();
+  if (!txt) return;
+  try {
+    const indices = parseRange(txt, totalPages);
+    selectedPages = new Set(indices);
+    updatePreviews();
+  } catch (e) {
+    // invalid input — don't change selection
+  }
 }
 
 // ===== Parse range =====
@@ -553,8 +603,8 @@ async function convertPDF() {
     const resize = document.getElementById('resizeImage').checked;
 
     const images = [];
-    const mimeMap = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
-    const extMap = { jpeg: 'jpg', png: 'png', webp: 'webp' };
+    const mimeMap = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', avif: 'image/avif' };
+    const extMap = { jpeg: 'jpg', png: 'png', webp: 'webp', avif: 'avif' };
     const mime = mimeMap[format];
     const ext = extMap[format];
 
@@ -579,7 +629,7 @@ async function convertPDF() {
       await page.render({ canvasContext: ctx, viewport }).promise;
 
       const blob = await new Promise(resolve => {
-        if (format === 'jpeg' || format === 'webp') {
+        if (format === 'jpeg' || format === 'webp' || format === 'avif') {
           canvas.toBlob(resolve, mime, quality / 100);
         } else {
           canvas.toBlob(resolve, mime);
@@ -618,7 +668,7 @@ async function convertPDF() {
 
 function downloadConvert() {
   if (!convertResultBlob) return;
-  const mimeMap = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+  const mimeMap = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', avif: 'image/avif' };
   const format = document.getElementById('imageFormat').value;
   const isZip = convertFileName.endsWith('.zip');
   downloadBlob(convertResultBlob, convertFileName, isZip ? 'application/zip' : mimeMap[format]);
@@ -654,6 +704,38 @@ document.getElementById('imageZoom').addEventListener('input', function() {
 document.getElementById('imageQuality').addEventListener('input', function() {
   document.getElementById('qualityValue').textContent = this.value;
 });
+
+// Sync input → thumbnails
+document.getElementById('pageRangeCut').addEventListener('input', applyRangeFromInput);
+document.getElementById('pageRangeConvert').addEventListener('input', applyRangeFromInput);
+
+// ===== Sample PDF =====
+async function downloadSample() {
+  const { PDFDocument, rgb, StandardFonts } = PDFLib;
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+
+  for (let i = 1; i <= 10; i++) {
+    const page = doc.addPage([400, 300]);
+    page.drawRectangle({
+      x: 0, y: 0, width: 400, height: 300,
+      color: rgb(0.99, 0.99, 0.99),
+      borderColor: rgb(0.88, 0.88, 0.88),
+      borderWidth: 1,
+    });
+    page.drawText(`Halaman ${i}`, {
+      x: 160, y: 150, size: 28, font,
+      color: rgb(0.8, 0.16, 0.16),
+    });
+    page.drawText(`Contoh PDF — ${i} of 10`, {
+      x: 130, y: 120, size: 11, font,
+      color: rgb(0.6, 0.6, 0.6),
+    });
+  }
+
+  const bytes = await doc.save();
+  downloadBlob(new Blob([bytes]), 'contoh-10-halaman.pdf', 'application/pdf');
+}
 
 // ===== Tab switching =====
 document.querySelectorAll('.tab-btn').forEach(btn => {
