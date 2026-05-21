@@ -1,18 +1,27 @@
 # PDFMZ - Aplikasi Pemotong PDF
 
-PDFMZ adalah aplikasi sederhana untuk memotong file PDF berdasarkan halaman yang dipilih.
+PDFMZ adalah aplikasi sederhana untuk memotong file PDF dan convert ke gambar.
 
-Aplikasi ini dibuat menggunakan:
+Ada dua versi:
 
-- Python
-- Streamlit
-- pypdf
+| Versi | Platform | Cara Pakai |
+|---|---|---|
+| **Web** 🌐 | Browser (client-side) | Buka [`web/index.html`](web/index.html) atau langsung coba di [home.adammuiz.com/pdf/](https://home.adammuiz.com/pdf/) |
+| **Desktop** 💻 | Windows / Linux / macOS | `streamlit run app.py` (Python) atau download [compiled binary](https://github.com/adammuizweb/pdfmz/releases) |
 
-## Fitur
+## Fitur (Web)
+
+- Potong PDF — pilih halaman via range (`1-3,5,7`), preview thumbnail
+- Convert PDF ke gambar — JPG / PNG / WEBP, slider kualitas & zoom
+- Semua proses di **browser** — file tidak dikirim ke server
+- Dukungan mobile & tablet
+
+## Fitur (Desktop)
 
 - Upload file PDF
 - Pilih halaman yang ingin diambil
-- Mendukung format halaman seperti:
+- Convert PDF ke gambar dengan kontrol kualitas
+- Mendukung format halaman:
   - `1`
   - `1-3`
   - `1,3,5`
@@ -70,7 +79,9 @@ http://localhost:8501
 
 ```text
 PDFMZ/
-├── app.py
+├── web/
+│   └── index.html        # Versi web (client-side JS)
+├── app.py                # Versi desktop (Python + Streamlit)
 ├── requirements.txt
 ├── README.md
 └── .gitignore

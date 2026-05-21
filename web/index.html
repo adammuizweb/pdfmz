@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PDFMZ — Potong PDF & Convert ke Gambar</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root {
+  --red: #c62828;
+  --red-dark: #8e1a1a;
+  --red-light: #fbe9e7;
+  --red-hover: #b71c1c;
+  --bg: #fcfcfc;
+  --surface: #ffffff;
+  --text: #1a1a1a;
+  --text-soft: #555;
+  --text-muted: #999;
+  --border: #e0e0e0;
+  --radius: 10px;
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --max-w: 900px;
+  --content-w: 740px;
+  --header-h: 64px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg);color:var(--text);font-family:var(--font);
+  font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  min-height:100vh;display:flex;flex-direction:column;
+}
+a{color:var(--red);text-decoration:none}
+a:hover{color:var(--red-hover)}
+
+/* Header */
+.header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:100;
+}
+.header-inner{
+  max-width:var(--max-w);margin:0 auto;padding:0 20px;
+  display:flex;align-items:center;height:var(--header-h);gap:16px;
+}
+.header-logo{
+  font-size:18px;font-weight:800;color:var(--text);
+  display:flex;align-items:center;gap:8px;
+}
+.header-logo span{color:var(--red)}
+.header-nav{margin-left:auto;display:flex;gap:20px;font-size:14px;font-weight:500}
+.header-nav a{color:var(--text-soft)}
+.header-nav a:hover{color:var(--red)}
+
+/* Main */
+.main{flex:1;max-width:var(--max-w);margin:0 auto;padding:32px 20px 60px;width:100%}
+.page-title{font-size:26px;font-weight:800;margin-bottom:4px}
+.page-sub{color:var(--text-muted);font-size:14px;margin-bottom:28px}
+.page-sub a{font-weight:600}
+
+/* Upload zone */
+.upload-zone{
+  border:2px dashed var(--border);border-radius:12px;
+  padding:50px 20px;text-align:center;cursor:pointer;
+  transition:border-color .25s,background .25s;background:var(--surface);
+}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--red);background:var(--red-light)}
+.upload-zone-icon{font-size:40px;margin-bottom:10px}
+.upload-zone-title{font-size:16px;font-weight:600;color:var(--text)}
+.upload-zone-hint{font-size:13px;color:var(--text-muted);margin-top:4px}
+.upload-zone input{display:none}
+
+/* Status bar */
+.status-bar{
+  display:none;align-items:center;gap:10px;
+  padding:12px 16px;border-radius:8px;margin-top:20px;font-size:14px;
+}
+.status-bar.show{display:flex}
+.status-bar.info{background:var(--red-light);color:var(--red-dark)}
+.status-bar.done{background:#e8f5e9;color:#2e7d32}
+.status-bar.error{background:#ffebee;color:#c62828}
+.status-bar-icon{font-size:20px}
+
+/* Tab */
+.tabs{display:none;margin-top:24px}
+.tabs.show{display:block}
+.tab-headers{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px}
+.tab-btn{
+  padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;
+  border:none;background:none;color:var(--text-muted);
+  border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s;
+}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--red);border-bottom-color:var(--red)}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* Preview grid */
+.preview-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
+  gap:12px;margin:20px 0;
+}
+.preview-item{
+  border:2px solid var(--border);border-radius:8px;overflow:hidden;
+  cursor:pointer;transition:border-color .2s;position:relative;
+}
+.preview-item:hover{border-color:var(--text-muted)}
+.preview-item.selected{border-color:var(--red);background:var(--red-light)}
+.preview-item canvas{width:100%;height:auto;display:block}
+.preview-num{
+  position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);
+  color:#fff;font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;
+}
+
+/* Form */
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:13px;font-weight:600;color:var(--text-soft);margin-bottom:4px}
+.form-group input,.form-group select{
+  width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;
+  font-size:14px;font-family:var(--font);background:var(--surface);color:var(--text);
+  transition:border-color .2s;
+}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--red)}
+.form-group input::placeholder{color:var(--text-muted)}
+.form-row{display:flex;gap:16px;flex-wrap:wrap}
+.form-row .form-group{flex:1;min-width:140px}
+.form-help{font-size:12px;color:var(--text-muted);margin-top:3px}
+
+/* Checkbox */
+.checkbox-group{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.checkbox-group input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:pointer}
+.checkbox-group label{font-size:14px;cursor:pointer;user-select:none}
+
+/* Button */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;padding:11px 22px;
+  border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;
+  transition:background .2s;font-family:var(--font);
+}
+.btn-primary{background:var(--red);color:#fff}
+.btn-primary:hover{background:var(--red-hover)}
+.btn-primary:disabled{background:var(--text-muted);cursor:not-allowed}
+.btn-outline{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-outline:hover{background:#f5f5f5}
+.btn-group{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+
+/* Result */
+.result-box{display:none;margin-top:20px}
+.result-box.show{display:block}
+.result-info{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.result-detail{font-size:14px;color:var(--text-soft)}
+.result-detail strong{color:var(--text)}
+
+/* Slider */
+input[type=range]{width:100%;height:5px;border-radius:3px;
+  -webkit-appearance:none;appearance:none;background:var(--border);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:18px;height:18px;border-radius:50%;background:var(--red);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
+  background:var(--red);cursor:pointer;border:none}
+.range-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:2px}
+
+/* Thumbnail select actions */
+.select-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.select-actions button{
+  font-size:12px;padding:5px 12px;border:1px solid var(--border);
+  border-radius:5px;background:var(--surface);cursor:pointer;color:var(--text-soft);font-family:var(--font)
+}
+.select-actions button:hover{background:#f5f5f5}
+
+/* Footer */
+.footer{
+  border-top:1px solid var(--border);padding:24px 20px;
+  text-align:center;font-size:13px;color:var(--text-muted);background:var(--surface);
+}
+.footer a{font-weight:500}
+
+@media(max-width:600px){
+  .header-inner{padding:0 14px}
+  .main{padding:20px 14px 40px}
+  .page-title{font-size:22px}
+  .upload-zone{padding:30px 14px}
+  .preview-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="header-logo"><span>✂️</span> PDFMZ</div>
+    <nav class="header-nav">
+      <a href="https://github.com/adammuizweb/pdfmz" target="_blank">GitHub</a>
+      <a href="https://github.com/adammuizweb/pdfmz/releases" target="_blank">Download Windows</a>
+    </nav>
+  </div>
+</header>
+
+<main class="main">
+  <h1 class="page-title">✂️ PDFMZ — Potong PDF &amp; Convert ke Gambar</h1>
+  <p class="page-sub">
+    Tools PDF yang jalan sepenuhnya di browser — file <strong>tidak dikirim ke server</strong>.
+    Source di <a href="https://github.com/adammuizweb/pdfmz" target="_blank">GitHub</a>.
+  </p>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-zone-icon">📄</div>
+    <div class="upload-zone-title">Klik atau taruh file PDF di sini</div>
+    <div class="upload-zone-hint">Maks 100MB — semua proses di browser</div>
+    <input type="file" id="fileInput" accept=".pdf">
+  </div>
+
+  <div class="status-bar" id="statusBar">
+    <span class="status-bar-icon" id="statusIcon"></span>
+    <span id="statusText"></span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs">
+    <div class="tab-headers">
+      <button class="tab-btn active" data-tab="cut">Potong PDF</button>
+      <button class="tab-btn" data-tab="convert">Convert ke Gambar</button>
+    </div>
+
+    <!-- Tab Potong -->
+    <div class="tab-pane active" id="tabCut">
+      <div class="select-actions">
+        <button onclick="selectAll()">Pilih Semua</button>
+        <button onclick="deselectAll()">Hapus Semua</button>
+      </div>
+      <div class="preview-grid" id="previewGrid"></div>
+
+      <div class="form-group">
+        <label>Halaman yang ingin diambil</label>
+        <input type="text" id="pageRangeCut" placeholder="Contoh: 1-3, 5, 7-9" value="">
+        <div class="form-help">Gunakan format range: <code>1-3,5,7-9</code></div>
+      </div>
+
+      <button class="btn btn-primary" id="btnCut" onclick="cutPDF()">✂️ Potong & Download</button>
+
+      <div class="result-box" id="resultCut">
+        <div class="result-info">
+          <div class="result-detail" id="resultCutDetail"></div>
+          <button class="btn btn-primary" id="btnCutDownload" onclick="downloadCut()">📥 Download</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Convert -->
+    <div class="tab-pane" id="tabConvert">
+      <div class="select-actions">
+        <button onclick="selectAll()">Pilih Semua</button>
+        <button onclick="deselectAll()">Hapus Semua</button>
+      </div>
+      <div class="preview-grid" id="previewGridConvert"></div>
+
+      <div class="form-group">
+        <label>Halaman yang ingin di-convert</label>
+        <input type="text" id="pageRangeConvert" placeholder="Contoh: 1-3, 5, 7-9" value="">
+        <div class="form-help">Gunakan format range: <code>1-3,5,7-9</code></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Format gambar</label>
+          <select id="imageFormat">
+            <option value="jpeg">JPG</option>
+            <option value="png">PNG</option>
+            <option value="webp">WEBP</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Zoom / resolusi</label>
+          <input type="range" id="imageZoom" min="1" max="4" step="0.5" value="2">
+          <div class="range-label"><span>1×</span><span id="zoomValue">2×</span><span>4×</span></div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Kualitas gambar</label>
+          <input type="range" id="imageQuality" min="10" max="100" step="5" value="80">
+          <div class="range-label"><span>10</span><span id="qualityValue">80</span><span>100</span></div>
+        </div>
+
+        <div class="form-group">
+          <label>Maks lebar (px)</label>
+          <input type="number" id="maxWidth" value="1200" min="300" max="5000" step="100">
+        </div>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="resizeImage">
+        <label for="resizeImage">Kecilkan dimensi gambar sesuai maks lebar</label>
+      </div>
+
+      <button class="btn btn-primary" id="btnConvert" onclick="convertPDF()">🖼️ Convert & Download</button>
+
+      <div class="result-box" id="resultConvert">
+        <div class="result-info">
+          <div class="result-detail" id="resultConvertDetail"></div>
+          <button class="btn btn-primary" id="btnConvertDownload" onclick="downloadConvert()">📥 Download</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  &copy; 2026 <a href="https://github.com/adammuizweb" target="_blank">Adam Muiz</a> —
+  <a href="https://github.com/adammuizweb/pdfmz" target="_blank">PDFMZ</a> —
+  Semua proses client-side, data tidak dikirim ke server.
+</footer>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let pdfDoc = null;
+let pdfBytes = null;
+let totalPages = 0;
+let fileName = '';
+let selectedPages = new Set();
+let cutResultBytes = null;
+let convertResultBlob = null;
+let convertFileName = '';
+
+// ===== Upload =====
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+
+uploadZone.addEventListener('dragover', (e) => {
+  e.preventDefault(); uploadZone.classList.add('dragover');
+});
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault(); uploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+fileInput.addEventListener('change', (e) => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+async function handleFile(file) {
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    showStatus('error', '✕', 'Bukan file PDF. Pilih file dengan ekstensi .pdf');
+    return;
+  }
+  if (file.size > 100 * 1024 * 1024) {
+    showStatus('error', '✕', 'File terlalu besar. Maks 100MB.');
+    return;
+  }
+
+  fileName = file.name;
+  showStatus('info', '⏳', 'Loading PDF...');
+
+  const arrayBuffer = await file.arrayBuffer();
+  pdfBytes = new Uint8Array(arrayBuffer);
+
+  try {
+    const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice(0) });
+    pdfDoc = await loadingTask.promise;
+    totalPages = pdfDoc.numPages;
+  } catch (e) {
+    showStatus('error', '✕', 'Gagal membaca PDF. Mungkin file rusak atau terenkripsi.');
+    return;
+  }
+
+  showStatus('done', '✅', `${fileName} — ${totalPages} halaman (${formatSize(file.size)})`);
+  document.getElementById('tabs').classList.add('show');
+
+  // Set default page range
+  const defaultRange = totalPages === 1 ? '1' : `1-${totalPages}`;
+  document.getElementById('pageRangeCut').value = defaultRange;
+  document.getElementById('pageRangeConvert').value = defaultRange;
+
+  // Select all by default
+  selectedPages = new Set(Array.from({ length: totalPages }, (_, i) => i));
+  renderThumbnails();
+  renderThumbnailsConvert();
+}
+
+// ===== Thumbnails =====
+async function renderThumbnails() {
+  const grid = document.getElementById('previewGrid');
+  grid.innerHTML = '';
+  for (let i = 1; i <= totalPages; i++) {
+    const div = document.createElement('div');
+    div.className = 'preview-item' + (selectedPages.has(i - 1) ? ' selected' : '');
+    div.dataset.page = i - 1;
+    div.addEventListener('click', () => togglePage(i - 1));
+
+    const num = document.createElement('span');
+    num.className = 'preview-num';
+    num.textContent = i;
+    div.appendChild(num);
+
+    const canvas = document.createElement('canvas');
+    div.appendChild(canvas);
+    grid.appendChild(div);
+
+    renderThumbPage(i, canvas);
+  }
+}
+
+async function renderThumbnailsConvert() {
+  const grid = document.getElementById('previewGridConvert');
+  grid.innerHTML = '';
+  for (let i = 1; i <= totalPages; i++) {
+    const div = document.createElement('div');
+    div.className = 'preview-item' + (selectedPages.has(i - 1) ? ' selected' : '');
+    div.dataset.page = i - 1;
+    div.addEventListener('click', () => togglePage(i - 1));
+
+    const num = document.createElement('span');
+    num.className = 'preview-num';
+    num.textContent = i;
+    div.appendChild(num);
+
+    const canvas = document.createElement('canvas');
+    div.appendChild(canvas);
+    grid.appendChild(div);
+
+    renderThumbPage(i, canvas);
+  }
+}
+
+async function renderThumbPage(pageNum, canvas) {
+  try {
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 0.4 });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+  } catch (e) {
+    // skip
+  }
+}
+
+function togglePage(idx) {
+  if (selectedPages.has(idx)) selectedPages.delete(idx);
+  else selectedPages.add(idx);
+  updatePreviews();
+}
+
+function selectAll() {
+  selectedPages = new Set(Array.from({ length: totalPages }, (_, i) => i));
+  updatePreviews();
+}
+
+function deselectAll() {
+  selectedPages = new Set();
+  updatePreviews();
+}
+
+function updatePreviews() {
+  document.querySelectorAll('.preview-item').forEach(el => {
+    const idx = parseInt(el.dataset.page);
+    el.classList.toggle('selected', selectedPages.has(idx));
+  });
+}
+
+// ===== Parse range =====
+function parseRange(text, total) {
+  const pages = new Set();
+  const parts = text.replace(/\s/g, '').split(',');
+  for (const part of parts) {
+    if (!part) continue;
+    if (part.includes('-')) {
+      const [a, b] = part.split('-');
+      const start = parseInt(a), end = parseInt(b);
+      if (isNaN(start) || isNaN(end)) throw new Error(`Format salah: ${part}`);
+      for (let i = start; i <= end; i++) {
+        if (i < 1 || i > total) throw new Error(`Halaman ${i} di luar jangkauan`);
+        pages.add(i - 1);
+      }
+    } else {
+      const p = parseInt(part);
+      if (isNaN(p)) throw new Error(`Format salah: ${part}`);
+      if (p < 1 || p > total) throw new Error(`Halaman ${p} di luar jangkauan`);
+      pages.add(p - 1);
+    }
+  }
+  if (pages.size === 0) throw new Error('Masukkan minimal satu halaman');
+  return [...pages].sort((a, b) => a - b);
+}
+
+// ===== Cut PDF =====
+async function cutPDF() {
+  const btn = document.getElementById('btnCut');
+  btn.disabled = true;
+  btn.textContent = '⏳ Memproses...';
+
+  try {
+    const rangeText = document.getElementById('pageRangeCut').value.trim();
+    const indices = parseRange(rangeText, totalPages);
+
+    const { PDFDocument } = PDFLib;
+    const srcDoc = await PDFDocument.load(pdfBytes);
+    const newDoc = await PDFDocument.create();
+
+    const pages = await newDoc.copyPages(srcDoc, indices);
+    for (const page of pages) newDoc.addPage(page);
+
+    cutResultBytes = await newDoc.save();
+    const sizeStr = formatSize(cutResultBytes.length);
+
+    document.getElementById('resultCutDetail').innerHTML =
+      `<strong>${indices.length}</strong> halaman — ${sizeStr}`;
+    document.getElementById('resultCut').classList.add('show');
+    showStatus('done', '✅', 'PDF berhasil dipotong. Klik Download.');
+  } catch (e) {
+    showStatus('error', '✕', e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✂️ Potong & Download';
+  }
+}
+
+function downloadCut() {
+  if (!cutResultBytes) return;
+  const base = fileName.replace(/\.pdf$/i, '') || 'document';
+  downloadBlob(new Blob([cutResultBytes]), `${base}-potong.pdf`, 'application/pdf');
+}
+
+// ===== Convert to Image =====
+async function convertPDF() {
+  const btn = document.getElementById('btnConvert');
+  btn.disabled = true;
+  btn.textContent = '⏳ Memproses...';
+
+  try {
+    const rangeText = document.getElementById('pageRangeConvert').value.trim();
+    const indices = parseRange(rangeText, totalPages);
+    const format = document.getElementById('imageFormat').value;
+    const zoom = parseFloat(document.getElementById('imageZoom').value);
+    const quality = parseInt(document.getElementById('imageQuality').value);
+    const maxWidth = parseInt(document.getElementById('maxWidth').value);
+    const resize = document.getElementById('resizeImage').checked;
+
+    const images = [];
+    const mimeMap = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+    const extMap = { jpeg: 'jpg', png: 'png', webp: 'webp' };
+    const mime = mimeMap[format];
+    const ext = extMap[format];
+
+    for (let i = 0; i < indices.length; i++) {
+      const pageNum = indices[i] + 1;
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: zoom });
+
+      let w = viewport.width;
+      let h = viewport.height;
+      if (resize && w > maxWidth) {
+        const ratio = maxWidth / w;
+        w = maxWidth;
+        h = Math.round(h * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(w / viewport.width, h / viewport.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const blob = await new Promise(resolve => {
+        if (format === 'jpeg' || format === 'webp') {
+          canvas.toBlob(resolve, mime, quality / 100);
+        } else {
+          canvas.toBlob(resolve, mime);
+        }
+      });
+
+      images.push({ name: `halaman_${pageNum}.${ext}`, blob });
+    }
+
+    if (images.length === 1) {
+      convertResultBlob = images[0].blob;
+      convertFileName = images[0].name;
+      document.getElementById('resultConvertDetail').innerHTML =
+        `<strong>1</strong> gambar — ${formatSize(images[0].blob.size)}`;
+      document.getElementById('btnConvertDownload').textContent = `📥 Download ${convertFileName}`;
+    } else {
+      const zip = new JSZip();
+      for (const img of images) zip.file(img.name, img.blob);
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      convertResultBlob = zipBlob;
+      convertFileName = `${fileName.replace(/\.pdf$/i, '') || 'document'}-gambar.zip`;
+      document.getElementById('resultConvertDetail').innerHTML =
+        `<strong>${images.length}</strong> gambar — ${formatSize(zipBlob.size)} (ZIP)`;
+      document.getElementById('btnConvertDownload').textContent = '📥 Download ZIP';
+    }
+
+    document.getElementById('resultConvert').classList.add('show');
+    showStatus('done', '✅', `${images.length} gambar berhasil dibuat.`);
+  } catch (e) {
+    showStatus('error', '✕', e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🖼️ Convert & Download';
+  }
+}
+
+function downloadConvert() {
+  if (!convertResultBlob) return;
+  const mimeMap = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+  const format = document.getElementById('imageFormat').value;
+  const isZip = convertFileName.endsWith('.zip');
+  downloadBlob(convertResultBlob, convertFileName, isZip ? 'application/zip' : mimeMap[format]);
+}
+
+// ===== Helpers =====
+function showStatus(type, icon, text) {
+  const bar = document.getElementById('statusBar');
+  const iconEl = document.getElementById('statusIcon');
+  const textEl = document.getElementById('statusText');
+  bar.className = 'status-bar show ' + type;
+  iconEl.textContent = icon;
+  textEl.textContent = text;
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function downloadBlob(blob, name, mime) {
+  const url = URL.createObjectURL(new Blob([blob], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ===== Slider labels =====
+document.getElementById('imageZoom').addEventListener('input', function() {
+  document.getElementById('zoomValue').textContent = this.value + '×';
+});
+document.getElementById('imageQuality').addEventListener('input', function() {
+  document.getElementById('qualityValue').textContent = this.value;
+});
+
+// ===== Tab switching =====
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('tab' + this.dataset.tab.charAt(0).toUpperCase() + this.dataset.tab.slice(1)).classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
